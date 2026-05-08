@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBL Interpretation Tool</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        :root {
+            --bg-primary:   #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card:      #1c2230;
+            --bg-hover:     #21283a;
+            --border:       #2a3349;
+            --accent:       #e6a817;
+            --accent-dim:   #b8860b;
+            --accent-glow:  rgba(230,168,23,0.18);
+            --text-primary: #e6eaf3;
+            --text-secondary:#8b95a8;
+            --text-muted:   #4e5a6e;
+            --good:         #22c55e;
+            --partial:      #f59e0b;
+            --poor:         #ef4444;
+            --good-bg:      rgba(34,197,94,0.12);
+            --partial-bg:   rgba(245,158,11,0.12);
+            --poor-bg:      rgba(239,68,68,0.12);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Barlow', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 0 1.5rem;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 12px rgba(0,0,0,0.35);
+        }
+        .header-logo { display: flex; align-items: center; gap: 14px; }
+        .logo-badge {
+            background: var(--accent);
+            color: #0d1117;
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 600;
+            font-size: 0.7rem;
+            letter-spacing: 0.08em;
+            padding: 4px 8px;
+            border-radius: 3px;
+        }
+        header h1 {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-weight: 700;
+            font-size: 1.2rem;
+            letter-spacing: 0.04em;
+            color: var(--text-primary);
+        }
+        header h1 span { color: var(--accent); }
+        .header-meta {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        .header-meta .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--text-muted); }
+
+        main { display: flex; flex: 1; overflow: hidden; }
+
+        aside {
+            width: 285px;
+            min-width: 285px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-section { border-bottom: 1px solid var(--border); padding: 14px 16px; }
+        .section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+        .section-number {
+            background: var(--accent);
+            color: #0d1117;
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 600;
+            font-size: 0.62rem;
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .section-title {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-weight: 600;
+            font-size: 0.82rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        .drop-zone {
+            border: 1.5px dashed var(--border);
+            border-radius: 6px;
+            padding: 18px 14px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            background: var(--bg-card);
+            position: relative;
+            overflow: hidden;
+        }
+        .drop-zone::before {
+            content: '';
+            position: absolute; inset: 0;
+            background: var(--accent-glow);
+            opacity: 0;
+            transition: opacity 0.25s;
+        }
+        .drop-zone:hover::before, .drop-zone.dragover::before { opacity: 1; }
+        .drop-zone.dragover { border-color: var(--accent); border-style: solid; }
+        .drop-zone svg { color: var(--text-muted); margin: 0 auto 6px; display: block; transition: color 0.25s; }
+        .drop-zone:hover svg { color: var(--accent); }
+        .drop-zone p { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5; }
+        .drop-zone .ext-badge {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.62rem;
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            padding: 2px 6px; border-radius: 3px;
+            color: var(--accent);
+            margin-top: 5px;
+        }
+        #fileStatus {
+            font-size: 0.72rem; margin-top: 7px; padding: 5px 9px; border-radius: 4px;
+            display: none; font-family: 'IBM Plex Mono', monospace;
+        }
+        #fileStatus.ok { background: rgba(34,197,94,0.12); color: var(--good); display: block; }
+        #fileStatus.err { background: rgba(239,68,68,0.12); color: var(--poor); display: block; }
+
+        label.field-label {
+            display: block;
+            font-size: 0.7rem; font-weight: 500;
+            letter-spacing: 0.06em; text-transform: uppercase;
+            color: var(--text-muted); margin-bottom: 4px;
+        }
+        select, input[type="number"] {
+            width: 100%; background: var(--bg-card);
+            border: 1px solid var(--border); border-radius: 4px;
+            padding: 6px 8px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.76rem; color: var(--text-primary);
+            outline: none; transition: border-color 0.2s;
+            appearance: none; -webkit-appearance: none;
+        }
+        select:focus, input[type="number"]:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent-glow);
+        }
+        select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238b95a8'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px;
+        }
+        input[type="number"] { -moz-appearance: textfield; }
+        input[type="number"]::-webkit-inner-spin-button { display: none; }
+        .field-group { margin-bottom: 9px; }
+        .field-hint {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.62rem; color: var(--text-muted); margin-top: 3px;
+        }
+
+        .slider-wrap { display: flex; align-items: center; gap: 10px; }
+        input[type="range"] {
+            flex: 1; -webkit-appearance: none;
+            height: 4px; border-radius: 2px;
+            background: var(--border); outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: var(--accent); cursor: pointer;
+            box-shadow: 0 0 6px var(--accent-glow);
+        }
+        #smoothVal, #sampleVal {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem; color: var(--accent);
+            min-width: 42px; text-align: right;
+        }
+
+        .btn {
+            width: 100%; padding: 8px 12px; border-radius: 5px;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-weight: 600; font-size: 0.88rem;
+            letter-spacing: 0.06em; text-transform: uppercase;
+            cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; gap: 7px;
+            border: none;
+        }
+        .btn-primary { background: var(--accent); color: #0d1117; }
+        .btn-primary:hover { background: #f5bc28; box-shadow: 0 2px 12px var(--accent-glow); }
+        .btn-secondary { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary); }
+        .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+        .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        .btn:disabled:hover { box-shadow: none; }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+
+        .content-area {
+            flex: 1; overflow-y: auto; padding: 18px;
+            display: flex; flex-direction: column; gap: 18px;
+        }
+
+        #statsBar {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border); border-radius: 8px;
+            padding: 12px 18px; display: none; gap: 0;
+            animation: fadeSlideIn 0.4s ease;
+        }
+        #statsBar.visible { display: flex; }
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .stat-item { flex: 1; text-align: center; padding: 0 10px; }
+        .stat-item + .stat-item { border-left: 1px solid var(--border); }
+        .stat-val { font-family: 'IBM Plex Mono', monospace; font-size: 1.3rem; font-weight: 600; }
+        .stat-val.good { color: var(--good); }
+        .stat-val.partial { color: var(--partial); }
+        .stat-val.poor { color: var(--poor); }
+        .stat-val.neutral { color: var(--text-primary); }
+        .stat-lbl {
+            font-size: 0.68rem; font-weight: 500;
+            letter-spacing: 0.07em; text-transform: uppercase;
+            color: var(--text-muted); margin-top: 2px;
+        }
+
+        .plot-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+        }
+        .plot-card-header {
+            padding: 10px 16px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .plot-card-title {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-weight: 600; font-size: 0.88rem;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+        #logPlot { width: 100%; min-height: 700px; }
+        .plot-empty {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; min-height: 320px;
+            color: var(--text-muted); gap: 12px;
+        }
+        .plot-empty svg { opacity: 0.25; }
+        .plot-empty p { font-size: 0.82rem; }
+
+        #tableContainer { display: none; }
+        #tableContainer.visible {
+            display: block; background: var(--bg-secondary);
+            border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+            animation: fadeSlideIn 0.4s ease 0.1s both;
+        }
+        .table-header { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+        .table-title {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-weight: 600; font-size: 0.88rem;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+        .tbl-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        thead tr { background: var(--bg-card); border-bottom: 1px solid var(--border); }
+        th {
+            padding: 9px 14px; text-align: left;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem; font-weight: 600;
+            letter-spacing: 0.06em; text-transform: uppercase;
+            color: var(--text-muted);
+        }
+        td {
+            padding: 7px 14px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.76rem;
+            border-bottom: 1px solid rgba(42,51,73,0.5);
+        }
+        tr:last-child td { border-bottom: none; }
+        tr.row-good { background: var(--good-bg); }
+        tr.row-partial { background: var(--partial-bg); }
+        tr.row-poor { background: var(--poor-bg); }
+        tr:hover { filter: brightness(1.15); }
+        .badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 2px 8px; border-radius: 3px;
+            font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em;
+        }
+        .badge-good { background: var(--good-bg); color: var(--good); border: 1px solid rgba(34,197,94,0.3); }
+        .badge-partial { background: var(--partial-bg); color: var(--partial); border: 1px solid rgba(245,158,11,0.3); }
+        .badge-poor { background: var(--poor-bg); color: var(--poor); border: 1px solid rgba(239,68,68,0.3); }
+
+        footer {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex; align-items: center; justify-content: space-between;
+            flex-shrink: 0;
+        }
+        footer p { font-size: 0.7rem; color: var(--text-muted); }
+        footer a { color: var(--accent); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        .spinner {
+            width: 14px; height: 14px;
+            border: 2px solid rgba(0,0,0,0.3);
+            border-top-color: #0d1117;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: none;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        [data-tip] { position: relative; cursor: help; }
+        [data-tip]::after {
+            content: attr(data-tip);
+            position: absolute; bottom: 120%; left: 50%;
+            transform: translateX(-50%);
+            background: #0d1117; border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-family: 'Barlow', sans-serif; font-size: 0.68rem;
+            padding: 4px 8px; border-radius: 4px;
+            white-space: nowrap; pointer-events: none;
+            opacity: 0; transition: opacity 0.15s; z-index: 999;
+        }
+        [data-tip]:hover::after { opacity: 1; }
+
+        .toast {
+            position: fixed; bottom: 24px; right: 24px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: 6px; padding: 10px 16px;
+            font-size: 0.8rem; color: var(--text-primary);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            z-index: 9999; display: flex; align-items: center; gap: 8px;
+            animation: toastIn 0.3s ease;
+            transition: opacity 0.3s;
+        }
+        .toast.success { border-left: 3px solid var(--good); }
+        .toast.error   { border-left: 3px solid var(--poor); }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 900px) {
+            main { flex-direction: column; overflow: visible; }
+            aside { width: 100%; min-width: unset; border-right: none; border-bottom: 1px solid var(--border); }
+            .content-area { overflow: visible; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-logo">
+        <span class="logo-badge">CBL</span>
+        <h1>Cement Bond Log <span>Interpreter</span></h1>
+    </div>
+    <div class="header-meta">
+        <span id="wellLabel">No well loaded</span>
+        <span class="dot"></span>
+        <span>v2.3</span>
+    </div>
+</header>
+
+<main>
+
+<aside>
+    <div class="sidebar-section">
+        <div class="section-header">
+            <span class="section-number">1</span>
+            <span class="section-title">Load LAS File</span>
+        </div>
+        <div id="dropZone" class="drop-zone">
+            <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"/>
+            </svg>
+            <p>Drag &amp; drop LAS file<br>or click to browse</p>
+            <span class="ext-badge">.LAS</span>
+            <input type="file" id="fileInput" accept=".las" style="display:none">
+        </div>
+        <p id="fileStatus"></p>
+    </div>
+
+    <div class="sidebar-section" id="curveSelection" style="display:none">
+        <div class="section-header">
+            <span class="section-number">2</span>
+            <span class="section-title">Map Curves</span>
+        </div>
+        <div class="field-group">
+            <label class="field-label">Depth Curve</label>
+            <select id="selDepth"></select>
+        </div>
+        <div class="field-group">
+            <label class="field-label">CBL Amplitude <span style="color:var(--accent)">*</span></label>
+            <select id="selCBL"></select>
+        </div>
+        <div class="field-group">
+            <label class="field-label">Gamma Ray (optional)</label>
+            <select id="selGR"></select>
+        </div>
+        <div class="field-group">
+            <label class="field-label">Transit Time / TT (optional)</label>
+            <select id="selTT"></select>
+        </div>
+    </div>
+
+    <div class="sidebar-section" id="paramsSection" style="display:none">
+        <div class="section-header">
+            <span class="section-number">3</span>
+            <span class="section-title">Interpretation Parameters</span>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label" data-tip="Select casing OD to auto-fill free-pipe amplitude">Casing Size</label>
+            <select id="casingPreset">
+                <option value="4.5">4 1/2 in (OD 4.500 in)</option>
+                <option value="5">5 in (OD 5.000 in)</option>
+                <option value="5.5">5 1/2 in (OD 5.500 in)</option>
+                <option value="6.625">6 5/8 in (OD 6.625 in)</option>
+                <option value="7" selected>7 in (OD 7.000 in)</option>
+                <option value="7.625">7 5/8 in (OD 7.625 in)</option>
+                <option value="9.625">9 5/8 in (OD 9.625 in)</option>
+                <option value="10.75">10 3/4 in (OD 10.750 in)</option>
+                <option value="13.375">13 3/8 in (OD 13.375 in)</option>
+                <option value="18.625">18 5/8 in (OD 18.625 in)</option>
+                <option value="custom">Custom</option>
+            </select>
+            <div class="field-hint" id="presetHint">Schlumberger chart reference: 61 mV</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label" data-tip="Free-pipe (0% bond) reference amplitude">Free Pipe CBL max (mV)</label>
+            <input type="number" id="cblMax" value="61.0" step="0.5">
+        </div>
+
+        <div class="field-group">
+            <label class="field-label" data-tip="100% bonded reference - typically 2-5 mV">100% Bond CBL min (mV)</label>
+            <input type="number" id="cblMin" value="3.0" step="0.5">
+        </div>
+
+        <div class="field-group">
+            <label class="field-label" data-tip="Resample depth data at this interval by averaging all samples within each bin">Sampling Rate (m)</label>
+            <div class="slider-wrap">
+                <input type="range" id="sampleRange" min="0.1" max="5" step="0.1" value="1">
+                <span id="sampleVal">1.0 m</span>
+            </div>
+            <div class="field-hint" id="sampleHint">Average data every 1.0 m before interpretation</div>
+        </div>
+
+        <div class="field-group">
+            <label class="field-label" data-tip="Moving-average window applied after resampling">Smoothing Window (m)</label>
+            <div class="slider-wrap">
+                <input type="range" id="smoothRange" min="0" max="10" step="0.5" value="1">
+                <span id="smoothVal">1.0 m</span>
+            </div>
+        </div>
+
+        <div class="field-group" style="margin-top:6px">
+            <label class="field-label">Bond Index Thresholds</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div>
+                    <div class="field-hint" style="margin-bottom:3px">Good (BI >=)</div>
+                    <input type="number" id="threshGood" value="0.80" step="0.05" min="0" max="1">
+                </div>
+                <div>
+                    <div class="field-hint" style="margin-bottom:3px">Partial (BI >=)</div>
+                    <input type="number" id="threshPartial" value="0.30" step="0.05" min="0" max="1">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar-section" id="actionButtons" style="display:none">
+        <div class="section-header">
+            <span class="section-number">4</span>
+            <span class="section-title">Run &amp; Export</span>
+        </div>
+        <button id="btnInterpret" class="btn btn-primary">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            <span id="btnText">Run Interpretation</span>
+            <span class="spinner" id="btnSpinner"></span>
+        </button>
+        <div class="btn-grid">
+            <button id="btnExcel" class="btn btn-secondary" disabled>
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+                Excel
+            </button>
+            <button id="btnPDF" class="btn btn-secondary" disabled>
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+                PDF
+            </button>
+        </div>
+    </div>
+
+    <div class="sidebar-section" style="flex:1">
+        <div class="section-header" style="margin-bottom:6px">
+            <span class="section-title">Bond Classification</span>
+        </div>
+        <div style="font-size:0.73rem; color:var(--text-secondary); line-height:1.7">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                <div style="width:10px;height:10px;border-radius:2px;background:var(--good);flex-shrink:0"></div>
+                <span><strong style="color:var(--good)">Good</strong> — BI >= <span id="legendGood">0.80</span></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                <div style="width:10px;height:10px;border-radius:2px;background:var(--partial);flex-shrink:0"></div>
+                <span><strong style="color:var(--partial)">Partial</strong> — <span id="legendPartial">0.30</span> <= BI < <span id="legendGood2">0.80</span></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:10px;height:10px;border-radius:2px;background:var(--poor);flex-shrink:0"></div>
+                <span><strong style="color:var(--poor)">Poor</strong> — BI < <span id="legendPartial2">0.30</span></span>
+            </div>
+        </div>
+    </div>
+</aside>
+
+<div class="content-area">
+    <div id="statsBar">
+        <div class="stat-item">
+            <div class="stat-val neutral" id="statInterval">—</div>
+            <div class="stat-lbl">Logged Interval (m)</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-val good" id="statGood">—</div>
+            <div class="stat-lbl">Good Bond %</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-val partial" id="statPartial">—</div>
+            <div class="stat-lbl">Partial Bond %</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-val poor" id="statPoor">—</div>
+            <div class="stat-lbl">Poor Bond %</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-val neutral" id="statZones">—</div>
+            <div class="stat-lbl">Bond Zones</div>
+        </div>
+    </div>
+
+    <div class="plot-card">
+        <div class="plot-card-header">
+            <span class="plot-card-title">CBL Log Display</span>
+            <span id="plotMeta" style="font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--text-muted)">Awaiting data...</span>
+        </div>
+        <div id="logPlot">
+            <div class="plot-empty">
+                <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1" viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="3" y1="9" x2="21" y2="9"/>
+                    <line x1="3" y1="15" x2="21" y2="15"/>
+                    <line x1="9" y1="3" x2="9" y2="21"/>
+                    <line x1="15" y1="3" x2="15" y2="21"/>
+                </svg>
+                <p>Load a LAS file and run interpretation to display the log</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="tableContainer">
+        <div class="table-header">
+            <span class="table-title">Interpretation Zones Summary</span>
+        </div>
+        <div class="tbl-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Top (m)</th>
+                        <th>Base (m)</th>
+                        <th>Thickness (m)</th>
+                        <th>CBL Min (mV)</th>
+                        <th>CBL Max (mV)</th>
+                        <th>Avg BI</th>
+                        <th>Classification</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+</main>
+
+<footer>
+    <p>2026 <strong style="color:var(--text-secondary)">Ismail Harkat</strong> — <a href="mailto:geoharkat@gmail.com">geoharkat@gmail.com</a></p>
+    <p>License: <a href="https://opensource.org/licenses/MIT" target="_blank">MIT</a> | Provided "as is" without warranty.</p>
+</footer>
+
+<script>
+    var PRESETS = {
+        "4.5":   { fp: 82,  hint: "4 1/2 in - estimated ~82 mV (extrapolated from SLB chart)" },
+        "5":     { fp: 77,  hint: "5 in - ~77 mV (Schlumberger reference)" },
+        "5.5":   { fp: 71,  hint: "5 1/2 in - ~71 mV (Schlumberger reference)" },
+        "6.625": { fp: 65,  hint: "6 5/8 in - ~65 mV (interpolated)" },
+        "7":     { fp: 61,  hint: "7 in - ~61 mV (Schlumberger reference)" },
+        "7.625": { fp: 59,  hint: "7 5/8 in - ~59 mV (Schlumberger reference)" },
+        "9.625": { fp: 52,  hint: "9 5/8 in - ~52 mV (Schlumberger reference)" },
+        "10.75": { fp: 50,  hint: "10 3/4 in - ~50 mV (Schlumberger reference)" },
+        "13.375":{ fp: 47,  hint: "13 3/8 in - ~47 mV (Schlumberger reference)" },
+        "18.625":{ fp: 40,  hint: "18 5/8 in - ~40 mV (industry estimate)" }
+    };
+
+    var CBL_MNEMONICS  = ['CBL','CBLA','AMP','AMPL','AMPLB','CBLAMP','AMPLITUDE',
+                           'A3FT','AMP3','E3','ATTN','BA','BOND_AMP','CBAMP',
+                           'FIRST_AMP','CASING_AMP','CBL3','AMPCBL','CBL_AMP',
+                           'AMPL_CBL','CBLAMPL','FA','CBLFR','CBAMP3'];
+    var DEPTH_MNEMONICS = ['DEPT','DEPTH','MD','TVD','RKB','MDEPTH','MEASURED_DEPTH','DEPT_M'];
+    var GR_MNEMONICS    = ['GR','GRGC','GAMMA','GRD','GRCO','GRC','GAMMA_RAY','NGR','GR_EDTC','HCGR'];
+    var TT_MNEMONICS    = ['TT','TT3','TTCO','TRAV','TRANSIT','TT_3FT','DT3','TT_CBL',
+                            'TTCBL','TT1','DTC','TRANST','TT3FT','TTT','TRANSIT_TIME','CBL_TT'];
+
+    var parsedData       = null;
+    var interpretedZones = null;
+    var wellName         = "Unknown_Well";
+
+    var dropZone     = document.getElementById('dropZone');
+    var fileInput    = document.getElementById('fileInput');
+    var fileStatus   = document.getElementById('fileStatus');
+    var selDepth     = document.getElementById('selDepth');
+    var selCBL       = document.getElementById('selCBL');
+    var selGR        = document.getElementById('selGR');
+    var selTT        = document.getElementById('selTT');
+    var casingPreset = document.getElementById('casingPreset');
+    var cblMaxInput  = document.getElementById('cblMax');
+    var cblMinInput  = document.getElementById('cblMin');
+    var sampleRange  = document.getElementById('sampleRange');
+    var sampleVal    = document.getElementById('sampleVal');
+    var sampleHint   = document.getElementById('sampleHint');
+    var smoothRange  = document.getElementById('smoothRange');
+    var smoothVal    = document.getElementById('smoothVal');
+    var threshGood   = document.getElementById('threshGood');
+    var threshPart   = document.getElementById('threshPartial');
+    var btnInterpret = document.getElementById('btnInterpret');
+    var btnExcel     = document.getElementById('btnExcel');
+    var btnPDF       = document.getElementById('btnPDF');
+
+    function showToast(msg, type) {
+        var existing = document.querySelector('.toast');
+        if (existing) existing.remove();
+        var t = document.createElement('div');
+        t.className = 'toast ' + (type || '');
+        t.innerHTML = (type === 'success'
+            ? '<svg width="16" height="16" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+            : type === 'error'
+            ? '<svg width="16" height="16" fill="none" stroke="#ef4444" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>'
+            : '') + '<span>' + msg + '</span>';
+        document.body.appendChild(t);
+        setTimeout(function() { t.style.opacity = '0'; setTimeout(function() { t.remove(); }, 300); }, 3500);
+    }
+
+    dropZone.addEventListener('click', function() { fileInput.click(); });
+    dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('dragover'); });
+    dropZone.addEventListener('drop', function(e) { e.preventDefault(); dropZone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener('change', function(e) { handleFile(e.target.files[0]); });
+
+    casingPreset.addEventListener('change', function(e) {
+        var v = e.target.value, p = PRESETS[v];
+        if (p) { cblMaxInput.value = p.fp; document.getElementById('presetHint').textContent = p.hint; }
+        else { document.getElementById('presetHint').textContent = 'Enter free-pipe amplitude manually'; }
+    });
+
+    sampleRange.addEventListener('input', function(e) {
+        var v = parseFloat(e.target.value);
+        sampleVal.textContent = v.toFixed(1) + ' m';
+        sampleHint.textContent = 'Average data every ' + v.toFixed(1) + ' m before interpretation';
+        if (parsedData && interpretedZones) runInterpretation();
+    });
+
+    smoothRange.addEventListener('input', function(e) {
+        smoothVal.textContent = parseFloat(e.target.value).toFixed(1) + ' m';
+        if (parsedData && interpretedZones) runInterpretation();
+    });
+
+    threshGood.addEventListener('input', updateLegend);
+    threshPart.addEventListener('input', updateLegend);
+    function updateLegend() {
+        var g = parseFloat(threshGood.value) || 0.80, p = parseFloat(threshPart.value) || 0.30;
+        document.getElementById('legendGood').textContent  = g.toFixed(2);
+        document.getElementById('legendGood2').textContent = g.toFixed(2);
+        document.getElementById('legendPartial').textContent  = p.toFixed(2);
+        document.getElementById('legendPartial2').textContent = p.toFixed(2);
+    }
+
+    btnInterpret.addEventListener('click', runInterpretation);
+    btnExcel.addEventListener('click', exportExcel);
+    btnPDF.addEventListener('click', exportPDF);
+
+    function handleFile(file) {
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.las')) { setStatus('err', 'Please select a .LAS file'); return; }
+        setStatus('loading', 'Loading ' + file.name + '...');
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                parsedData = parseLAS(e.target.result);
+                wellName   = parsedData.wellName || file.name.replace(/\.las$/i, '');
+                document.getElementById('wellLabel').textContent = wellName;
+
+                var depths = parsedData.data[parsedData.curves[0]];
+                var autoSr = detectSampleRate(depths);
+                if (autoSr > 0.05) {
+                    sampleRange.value = Math.round(autoSr * 10) / 10;
+                    sampleVal.textContent = parseFloat(sampleRange.value).toFixed(1) + ' m';
+                    sampleHint.textContent = 'Average data every ' + parseFloat(sampleRange.value).toFixed(1) + ' m before interpretation (auto-detected from LAS)';
+                }
+
+                populateDropdowns();
+                setStatus('ok', 'Loaded: ' + file.name + ' — ' + parsedData.curves.length + ' curves, ' + (Object.values(parsedData.data)[0] || []).length + ' samples');
+                ['curveSelection','paramsSection','actionButtons'].forEach(function(id) {
+                    document.getElementById(id).style.display = '';
+                });
+                showToast('LAS file loaded successfully', 'success');
+            } catch (err) {
+                setStatus('err', 'Error: ' + err.message);
+                showToast('Failed to parse LAS file', 'error');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function detectSampleRate(depths) {
+        var diffs = [];
+        for (var i = 1; i < Math.min(depths.length, 100); i++) {
+            if (!isNaN(depths[i]) && !isNaN(depths[i-1])) {
+                var d = Math.abs(depths[i] - depths[i-1]);
+                if (d > 0) diffs.push(d);
+            }
+        }
+        if (!diffs.length) return 0.1524;
+        diffs.sort(function(a,b){ return a - b; });
+        return diffs[Math.floor(diffs.length / 2)];
+    }
+
+    function setStatus(type, msg) {
+        fileStatus.textContent = msg;
+        fileStatus.className = type === 'ok' ? 'ok' : type === 'err' ? 'err' : '';
+        if (type === 'loading') { fileStatus.style.display = 'block'; fileStatus.style.color = 'var(--accent)'; }
+        else fileStatus.style.color = '';
+    }
+
+    function parseLAS(text) {
+        var lines = text.split(/\r?\n/);
+        var section = '', metadata = {}, curves = [], data = [];
+        for (var ri = 0; ri < lines.length; ri++) {
+            var line = lines[ri].trim();
+            if (line.startsWith('#') || line === '') continue;
+            if (line.startsWith('~')) { section = line.charAt(1).toUpperCase(); continue; }
+            if (section === 'W') {
+                var m = line.match(/^WELL\s*\.\s+([^:]+)/i);
+                if (m) metadata.wellName = m[1].trim();
+            }
+            if (section === 'C') {
+                var parts = line.split(/[\s.]+/);
+                if (parts.length > 0 && parts[0]) curves.push(parts[0]);
+            } else if (section === 'A') {
+                var row = line.split(/\s+/).map(function(v) {
+                    var n = Number(v);
+                    return (isNaN(n) || n <= -999) ? NaN : n;
+                });
+                if (row.length >= curves.length && curves.length > 0) data.push(row.slice(0, curves.length));
+            }
+        }
+        if (!curves.length) throw new Error('No curve section (~C) found in LAS file.');
+        if (!data.length) throw new Error('No data section (~A) found in LAS file.');
+
+        var result = { wellName: metadata.wellName || 'Well', curves: curves, data: {} };
+        curves.forEach(function(c) { result.data[c] = []; });
+        data.forEach(function(row) { curves.forEach(function(c, i) { result.data[c].push(row[i]); }); });
+        return result;
+    }
+
+    function populateDropdowns() {
+        [selDepth, selCBL, selGR, selTT].forEach(function(s) {
+            s.innerHTML = '<option value="">-- None --</option>';
+            parsedData.curves.forEach(function(c) { s.appendChild(new Option(c, c)); });
+        });
+        autoSelect(selDepth, DEPTH_MNEMONICS);
+        autoSelect(selCBL, CBL_MNEMONICS);
+        autoSelect(selGR, GR_MNEMONICS);
+        autoSelect(selTT, TT_MNEMONICS);
+    }
+
+    function autoSelect(sel, kws) {
+        for (var i = 0; i < kws.length; i++) {
+            var m = parsedData.curves.find(function(c) { return c.toUpperCase() === kws[i] || c.toUpperCase().startsWith(kws[i]); });
+            if (m) { sel.value = m; return; }
+        }
+    }
+
+    /* ─── Resampling: average data within each depth bin ─── */
+    function resampleData(depthArr, valueArr, interval) {
+        if (!interval || interval <= 0 || !depthArr.length) {
+            return { depths: depthArr.slice(), values: valueArr.slice() };
+        }
+
+        var minD = Infinity, maxD = -Infinity;
+        for (var i = 0; i < depthArr.length; i++) {
+            if (!isNaN(depthArr[i])) {
+                if (depthArr[i] < minD) minD = depthArr[i];
+                if (depthArr[i] > maxD) maxD = depthArr[i];
+            }
+        }
+        if (minD === Infinity) return { depths: [], values: [] };
+
+        /* Bin edges start from floor(minD) */
+        var binStart = Math.floor(minD);
+        var nBins = Math.ceil((maxD - binStart) / interval);
+
+        var newDepths = [], newValues = [];
+        for (var b = 0; b < nBins; b++) {
+            var bTop    = binStart + b * interval;
+            var bBottom = bTop + interval;
+            var bCenter = bTop + interval / 2;
+
+            var sum = 0, cnt = 0;
+            for (var j = 0; j < depthArr.length; j++) {
+                if (!isNaN(depthArr[j]) && !isNaN(valueArr[j]) && depthArr[j] >= bTop && depthArr[j] < bBottom) {
+                    sum += valueArr[j];
+                    cnt++;
+                }
+            }
+            if (cnt > 0) {
+                newDepths.push(bCenter);
+                newValues.push(sum / cnt);
+            }
+        }
+        return { depths: newDepths, values: newValues };
+    }
+
+    /* ─── Moving average ────────────────────────────────────── */
+    function movingAverage(arr, sr, wLen) {
+        var ws = Math.round(wLen / sr);
+        if (ws <= 1 || wLen === 0) return arr.slice();
+        var half = Math.floor(ws / 2);
+        return arr.map(function(v, i) {
+            if (isNaN(v)) return NaN;
+            var sum = 0, cnt = 0;
+            for (var j = Math.max(0, i - half); j <= Math.min(arr.length - 1, i + half); j++) {
+                if (!isNaN(arr[j])) { sum += arr[j]; cnt++; }
+            }
+            return cnt > 0 ? sum / cnt : NaN;
+        });
+    }
+
+    /* ─── Zone generation — sampleInterval-aware ────────────── */
+    function generateZones(depths, smoothed, classes, bis, sampleInterval) {
+        /*
+         * Each resampled point sits at the CENTER of a bin of width sampleInterval.
+         * A point at depth d actually covers [d - h, d + h] where h = sampleInterval/2.
+         *
+         * So a zone's true top = (first point depth) - h
+         * and its true bottom = (last point depth) + h
+         *
+         * This ensures even a single-point zone has thickness = sampleInterval, never 0.
+         */
+        var halfBin = sampleInterval / 2;
+        var zones = [], cur = null;
+
+        for (var i = 0; i < depths.length; i++) {
+            if (isNaN(depths[i]) || isNaN(smoothed[i])) continue;
+            var cls = classes[i], cbl = smoothed[i], d = depths[i], bi = bis[i];
+
+            if (!cur || cur.class !== cls) {
+                if (cur) zones.push(cur);
+                /* New zone starts: top extends half a bin above the first point */
+                cur = {
+                    topDepth:    d - halfBin,
+                    bottomDepth: d + halfBin,
+                    minCBL: cbl, maxCBL: cbl,
+                    sumBI: bi, count: 1, class: cls
+                };
+            } else {
+                /* Extend bottom: last point's bottom edge */
+                cur.bottomDepth = d + halfBin;
+                if (cbl < cur.minCBL) cur.minCBL = cbl;
+                if (cbl > cur.maxCBL) cur.maxCBL = cbl;
+                cur.sumBI += bi;
+                cur.count++;
+            }
+        }
+        if (cur) zones.push(cur);
+
+        return zones.map(function(z) {
+            z.avgBI = z.sumBI / z.count;
+            z.thickness = z.bottomDepth - z.topDepth;
+            return z;
+        });
+    }
+
+    /* ─── Run interpretation ────────────────────────────────── */
+    function runInterpretation() {
+        var depthC = selDepth.value, cblC = selCBL.value;
+        if (!depthC || !cblC) { showToast('Please select Depth and CBL Amplitude curves.', 'error'); return; }
+
+        setRunning(true);
+        setTimeout(function() {
+            try {
+                var rawDepths = parsedData.data[depthC];
+                var rawCBL    = parsedData.data[cblC];
+                var cblMax    = parseFloat(cblMaxInput.value);
+                var cblMin    = parseFloat(cblMinInput.value);
+                var sampleInt = parseFloat(sampleRange.value);
+                var wLen      = parseFloat(smoothRange.value);
+                var tGood     = parseFloat(threshGood.value);
+                var tPart     = parseFloat(threshPart.value);
+
+                if (isNaN(cblMax) || isNaN(cblMin) || cblMax <= cblMin) {
+                    showToast('CBL max must be greater than CBL min.', 'error');
+                    setRunning(false);
+                    return;
+                }
+
+                /* Step 1: Resample */
+                var resampled = resampleData(rawDepths, rawCBL, sampleInt);
+                var depths = resampled.depths;
+                var resampledCBL = resampled.values;
+
+                var grResampled = null, ttResampled = null;
+                if (selGR.value) {
+                    var grRes = resampleData(rawDepths, parsedData.data[selGR.value], sampleInt);
+                    grResampled = grRes.values;
+                }
+                if (selTT.value) {
+                    var ttRes = resampleData(rawDepths, parsedData.data[selTT.value], sampleInt);
+                    ttResampled = ttRes.values;
+                }
+
+                /* Step 2: Smooth */
+                var sr = sampleInt;
+                var smooth = movingAverage(resampledCBL, sr, wLen);
+
+                /* Step 3: BI + classify */
+                var biArr = [], classArr = [];
+                for (var i = 0; i < depths.length; i++) {
+                    var c = smooth[i];
+                    if (isNaN(c) || isNaN(depths[i])) { biArr.push(NaN); classArr.push('Unknown'); continue; }
+                    var bi = Math.max(0, Math.min(1, (cblMax - c) / (cblMax - cblMin)));
+                    biArr.push(bi);
+                    classArr.push(bi >= tGood ? 'Good' : bi >= tPart ? 'Partial' : 'Poor');
+                }
+
+                /* Step 4: Zones — pass sampleInterval so edges are correct */
+                interpretedZones = generateZones(depths, smooth, classArr, biArr, sampleInt);
+
+                renderPlot(depths, resampledCBL, smooth, biArr, grResampled, ttResampled, depthC, cblC, selGR.value, selTT.value, interpretedZones);
+                renderTable(interpretedZones);
+                renderStats(interpretedZones);
+
+                btnExcel.disabled = false;
+                btnPDF.disabled   = false;
+                document.getElementById('plotMeta').textContent =
+                    wellName + ' | CBL max=' + cblMax + ' mV | CBL min=' + cblMin + ' mV | sample=' + sampleInt + ' m | smooth=' + wLen + ' m';
+
+                showToast('Interpretation complete — ' + interpretedZones.length + ' zones | ' + depths.length + ' resampled points', 'success');
+            } catch(e) {
+                showToast('Interpretation error: ' + e.message, 'error');
+            }
+            setRunning(false);
+        }, 50);
+    }
+
+    function setRunning(v) {
+        btnInterpret.disabled = v;
+        document.getElementById('btnText').textContent = v ? 'Running...' : 'Run Interpretation';
+        document.getElementById('btnSpinner').style.display = v ? 'block' : 'none';
+    }
+
+    /* ─── Stats: percentage by LENGTH ────────────────────────── */
+    function renderStats(zones) {
+        var totalLength = zones.reduce(function(s, z) { return s + z.thickness; }, 0);
+        var goodLen    = zones.filter(function(z) { return z.class === 'Good'; }).reduce(function(s, z) { return s + z.thickness; }, 0);
+        var partialLen = zones.filter(function(z) { return z.class === 'Partial'; }).reduce(function(s, z) { return s + z.thickness; }, 0);
+        var poorLen    = zones.filter(function(z) { return z.class === 'Poor'; }).reduce(function(s, z) { return s + z.thickness; }, 0);
+
+        var goodPct    = totalLength > 0 ? (goodLen / totalLength * 100) : 0;
+        var partialPct = totalLength > 0 ? (partialLen / totalLength * 100) : 0;
+        var poorPct    = totalLength > 0 ? (poorLen / totalLength * 100) : 0;
+
+        document.getElementById('statInterval').textContent = Math.round(totalLength);
+        document.getElementById('statGood').textContent     = goodPct.toFixed(1) + '%';
+        document.getElementById('statPartial').textContent   = partialPct.toFixed(1) + '%';
+        document.getElementById('statPoor').textContent      = poorPct.toFixed(1) + '%';
+        document.getElementById('statZones').textContent     = zones.length;
+        document.getElementById('statsBar').classList.add('visible');
+    }
+
+    /* ─── Plot ───────────────────────────────────────────────── */
+    function renderPlot(depths, rawResampled, smooth, bi, grResampled, ttResampled, depthName, cblName, grName, ttName, zones) {
+        var traces = [];
+
+        if (grResampled) {
+            traces.push({ x: grResampled, y: depths, name: grName || 'GR', xaxis: 'x1', type: 'scatter', mode: 'lines',
+                line: { color: '#22c55e', width: 1.5 } });
+        }
+        traces.push({ x: rawResampled, y: depths, name: cblName + ' (resampled)', xaxis: 'x2', type: 'scatter', mode: 'lines',
+            line: { color: 'rgba(100,120,160,0.45)', width: 1 }, showlegend: true });
+        traces.push({ x: smooth, y: depths, name: cblName + ' Smooth', xaxis: 'x2', type: 'scatter', mode: 'lines',
+            line: { color: '#60a5fa', width: 2 } });
+        if (ttResampled) {
+            traces.push({ x: ttResampled, y: depths, name: ttName || 'TT', xaxis: 'x3', type: 'scatter', mode: 'lines',
+                line: { color: '#f87171', width: 1.5 } });
+        }
+        traces.push({ x: bi, y: depths, name: 'Bond Index', xaxis: 'x4', type: 'scatter', mode: 'lines',
+            line: { color: '#e6a817', width: 2.5 }, fill: 'tozerox', fillcolor: 'rgba(230,168,23,0.07)' });
+
+        /* Color fill shapes — use the corrected zone boundaries */
+        var shapes = zones.map(function(z) {
+            var color = 'rgba(0,0,0,0)';
+            if (z.class === 'Good')       color = 'rgba(34,197,94,0.22)';
+            else if (z.class === 'Partial') color = 'rgba(245,158,11,0.22)';
+            else if (z.class === 'Poor')    color = 'rgba(239,68,68,0.22)';
+            return { type: 'rect', xref: 'paper', yref: 'y', x0: 0.76, x1: 1.0,
+                y0: z.topDepth, y1: z.bottomDepth, fillcolor: color, line: { width: 0 } };
+        });
+
+        var tGood = parseFloat(threshGood.value) || 0.80;
+        var tPart = parseFloat(threshPart.value) || 0.30;
+        shapes.push(
+            { type: 'line', xref: 'x4', yref: 'paper', x0: tGood, x1: tGood, y0: 0, y1: 1,
+              line: { color: 'rgba(34,197,94,0.5)', width: 1, dash: 'dot' } },
+            { type: 'line', xref: 'x4', yref: 'paper', x0: tPart, x1: tPart, y0: 0, y1: 1,
+              line: { color: 'rgba(245,158,11,0.5)', width: 1, dash: 'dot' } }
+        );
+
+        var dark = '#161b22', gridCol = 'rgba(42,51,73,0.7)', txtCol = '#8b95a8';
+        var layout = {
+            title: { text: 'CBL Interpretation — ' + wellName, font: { color: '#e6eaf3', family: 'Barlow Condensed,sans-serif', size: 14 } },
+            paper_bgcolor: dark, plot_bgcolor: dark,
+            grid: { rows: 1, columns: 4, pattern: 'independent' },
+            height: 750, showlegend: true,
+            legend: { bgcolor: 'rgba(0,0,0,0.4)', bordercolor: '#2a3349', borderwidth: 1, font: { color: '#8b95a8', size: 10 } },
+            font: { color: txtCol, family: 'IBM Plex Mono, monospace', size: 10 },
+            yaxis: { title: { text: depthName + ' (m)', font: { color: txtCol } }, autorange: 'reversed',
+                gridcolor: gridCol, linecolor: '#2a3349', zerolinecolor: gridCol, tickfont: { color: txtCol } },
+            xaxis:  { title: { text: grName || 'GR', font: { color: '#22c55e' } }, domain: [0, 0.20],
+                gridcolor: gridCol, linecolor: '#2a3349', tickfont: { color: txtCol } },
+            xaxis2: { title: { text: 'CBL (mV)', font: { color: '#60a5fa' } }, domain: [0.25, 0.47],
+                gridcolor: gridCol, linecolor: '#2a3349', tickfont: { color: txtCol } },
+            xaxis3: { title: { text: ttName || 'TT (us)', font: { color: '#f87171' } }, domain: [0.52, 0.72],
+                gridcolor: gridCol, linecolor: '#2a3349', tickfont: { color: txtCol } },
+            xaxis4: { title: { text: 'Bond Index', font: { color: '#e6a817' } }, domain: [0.77, 1.0],
+                range: [0, 1], gridcolor: gridCol, linecolor: '#2a3349', tickfont: { color: txtCol } },
+            margin: { l: 70, r: 20, t: 50, b: 50 },
+            shapes: shapes
+        };
+        Plotly.newPlot('logPlot', traces, layout, { responsive: true, displayModeBar: true });
+    }
+
+    /* ─── Table — integers for all depth/CBL values ─────────── */
+    function renderTable(zones) {
+        var tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        var tc = document.getElementById('tableContainer');
+        tc.classList.add('visible');
+
+        zones.forEach(function(z, i) {
+            var tr = document.createElement('tr');
+            tr.className = z.class === 'Good' ? 'row-good' : z.class === 'Partial' ? 'row-partial' : 'row-poor';
+            var badgeCls = z.class === 'Good' ? 'badge-good' : z.class === 'Partial' ? 'badge-partial' : 'badge-poor';
+            tr.innerHTML =
+                '<td>' + (i + 1) + '</td>' +
+                '<td>' + Math.round(z.topDepth) + '</td>' +
+                '<td>' + Math.round(z.bottomDepth) + '</td>' +
+                '<td>' + Math.round(z.thickness) + '</td>' +
+                '<td>' + Math.round(z.minCBL) + '</td>' +
+                '<td>' + Math.round(z.maxCBL) + '</td>' +
+                '<td>' + z.avgBI.toFixed(2) + '</td>' +
+                '<td><span class="badge ' + badgeCls + '">' + z.class + '</span></td>';
+            tbody.appendChild(tr);
+        });
+    }
+
+    /* ─── Excel Export ───────────────────────────────────────── */
+    function exportExcel() {
+        if (!interpretedZones) return;
+
+        var totalLength = interpretedZones.reduce(function(s, z) { return s + z.thickness; }, 0);
+        var goodLen    = interpretedZones.filter(function(z) { return z.class === 'Good'; }).reduce(function(s, z) { return s + z.thickness; }, 0);
+        var partialLen = interpretedZones.filter(function(z) { return z.class === 'Partial'; }).reduce(function(s, z) { return s + z.thickness; }, 0);
+        var poorLen    = interpretedZones.filter(function(z) { return z.class === 'Poor'; }).reduce(function(s, z) { return s + z.thickness; }, 0);
+
+        var wsData = interpretedZones.map(function(z, i) {
+            return {
+                "#": i + 1,
+                "Top Depth (m)": Math.round(z.topDepth),
+                "Base Depth (m)": Math.round(z.bottomDepth),
+                "Thickness (m)": Math.round(z.thickness),
+                "CBL Min (mV)": Math.round(z.minCBL),
+                "CBL Max (mV)": Math.round(z.maxCBL),
+                "Avg Bond Index": +z.avgBI.toFixed(2),
+                "Classification": z.class
+            };
+        });
+        var ws = XLSX.utils.json_to_sheet(wsData);
+        var wb = XLSX.utils.book_new();
+
+        var summary = [
+            ["CBL Interpretation Report"],
+            [],
+            ["Well:", wellName],
+            ["Casing:", casingPreset.options[casingPreset.selectedIndex].text],
+            ["Free Pipe CBL max (mV):", cblMaxInput.value],
+            ["100% Bond CBL min (mV):", cblMinInput.value],
+            ["Sampling Rate (m):", sampleRange.value],
+            ["Smoothing Window (m):", smoothRange.value],
+            ["Good BI Threshold:", threshGood.value],
+            ["Partial BI Threshold:", threshPart.value],
+            [],
+            ["Total Zones:", interpretedZones.length],
+            ["Total Logged Length (m):", Math.round(totalLength)],
+            [],
+            ["Good Bond Length (m):", Math.round(goodLen), "Percentage:", +(totalLength > 0 ? goodLen / totalLength * 100 : 0).toFixed(1) + "%"],
+            ["Partial Bond Length (m):", Math.round(partialLen), "Percentage:", +(totalLength > 0 ? partialLen / totalLength * 100 : 0).toFixed(1) + "%"],
+            ["Poor Bond Length (m):", Math.round(poorLen), "Percentage:", +(totalLength > 0 ? poorLen / totalLength * 100 : 0).toFixed(1) + "%"],
+        ];
+        var wsSummary = XLSX.utils.aoa_to_sheet(summary);
+        XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
+        XLSX.utils.book_append_sheet(wb, ws, "Zones");
+        XLSX.writeFile(wb, wellName + '_CBL_Interpretation.xlsx');
+        showToast('Excel report saved', 'success');
+    }
+
+    /* ─── PDF Export ─────────────────────────────────────────── */
+    async function exportPDF() {
+        if (!interpretedZones) return;
+        var jsPDF = window.jspdf.jsPDF;
+        var doc = new jsPDF('p', 'mm', 'a4');
+        var W = 210, H = 297, margin = 14;
+
+        var totalLength = interpretedZones.reduce(function(s, z) { return s + z.thickness; }, 0);
+        var goodLen    = interpretedZones.filter(function(z) { return z.class === 'Good'; }).reduce(function(s, z) { return s + z.thickness; }, 0);
+        var partialLen = interpretedZones.filter(function(z) { return z.class === 'Partial'; }).reduce(function(s, z) { return s + z.thickness; }, 0);
+        var poorLen    = interpretedZones.filter(function(z) { return z.class === 'Poor'; }).reduce(function(s, z) { return s + z.thickness; }, 0);
+        var goodPct    = totalLength > 0 ? (goodLen / totalLength * 100).toFixed(1) : '0.0';
+        var partialPct = totalLength > 0 ? (partialLen / totalLength * 100).toFixed(1) : '0.0';
+        var poorPct    = totalLength > 0 ? (poorLen / totalLength * 100).toFixed(1) : '0.0';
+
+        /* Cover page */
+        doc.setFillColor(13, 17, 23);
+        doc.rect(0, 0, W, H, 'F');
+        doc.setFillColor(230, 168, 23);
+        doc.rect(0, 0, 6, H, 'F');
+        doc.setDrawColor(230, 168, 23);
+        doc.setLineWidth(0.5);
+        doc.line(20, 36, W - margin, 36);
+
+        doc.setFontSize(28);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(230, 234, 243);
+        doc.text('CEMENT BOND LOG', 20, 58);
+        doc.text('INTERPRETATION', 20, 71);
+        doc.text('REPORT', 20, 84);
+
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(139, 149, 168);
+        doc.text('Acoustic Cement Evaluation - CBL/VDL Analysis', 20, 97);
+
+        doc.setDrawColor(42, 51, 73);
+        doc.setLineWidth(0.3);
+        doc.line(20, 104, W - margin, 104);
+
+        var infoItems = [
+            ['Well', wellName],
+            ['Casing', casingPreset.options[casingPreset.selectedIndex].text],
+            ['Free Pipe CBL max (mV)', cblMaxInput.value],
+            ['100% Bond CBL min (mV)', cblMinInput.value],
+            ['Sampling Rate', sampleRange.value + ' m'],
+            ['Smoothing Window', smoothRange.value + ' m'],
+            ['Good BI Threshold', threshGood.value],
+            ['Partial BI Threshold', threshPart.value],
+            ['Total Zones', String(interpretedZones.length)],
+            ['Total Logged Length', Math.round(totalLength) + ' m'],
+        ];
+        var iy = 118;
+        doc.setFontSize(9);
+        infoItems.forEach(function(item) {
+            doc.setTextColor(100, 110, 130);
+            doc.setFont('helvetica', 'normal');
+            doc.text(item[0] + ':', 20, iy);
+            doc.setTextColor(230, 168, 23);
+            doc.setFont('helvetica', 'bold');
+            doc.text(item[1], 90, iy);
+            iy += 9;
+        });
+
+        var statItems = [
+            { lbl: 'GOOD BOND', val: goodPct + '%', col: [34, 197, 94] },
+            { lbl: 'PARTIAL BOND', val: partialPct + '%', col: [245, 158, 11] },
+            { lbl: 'POOR BOND', val: poorPct + '%', col: [239, 68, 68] },
+        ];
+        var sx = 20;
+        statItems.forEach(function(s) {
+            doc.setFillColor(Math.round(s.col[0] * 0.15), Math.round(s.col[1] * 0.15), Math.round(s.col[2] * 0.15));
+            doc.roundedRect(sx, 216, 54, 28, 2, 2, 'F');
+            doc.setDrawColor(s.col[0], s.col[1], s.col[2]);
+            doc.setLineWidth(0.5);
+            doc.roundedRect(sx, 216, 54, 28, 2, 2, 'S');
+            doc.setFontSize(20);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(s.col[0], s.col[1], s.col[2]);
+            doc.text(s.val, sx + 27, 230, { align: 'center' });
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(139, 149, 168);
+            doc.text(s.lbl, sx + 27, 238, { align: 'center' });
+            sx += 60;
+        });
+
+        doc.setFontSize(8);
+        doc.setTextColor(100, 110, 130);
+        doc.text('Good: ' + Math.round(goodLen) + ' m  |  Partial: ' + Math.round(partialLen) + ' m  |  Poor: ' + Math.round(poorLen) + ' m', 20, 256);
+
+        doc.setFontSize(8);
+        doc.setTextColor(60, 70, 90);
+        doc.text('Generated: ' + new Date().toUTCString(), 20, H - 18);
+        doc.text('2026 Ismail Harkat | geoharkat@gmail.com', 20, H - 12);
+
+        /* Page 2: Log Image */
+        doc.addPage();
+        var imgData = null;
+        try {
+            await Plotly.relayout('logPlot', { height: 1400, margin: { l: 80, r: 20, t: 60, b: 50 } });
+            imgData = await Plotly.toImage('logPlot', { format: 'png', height: 1400, width: 900, scale: 2 });
+            await Plotly.relayout('logPlot', { height: 750, margin: { l: 70, r: 20, t: 50, b: 50 } });
+        } catch (e) {
+            try { await Plotly.relayout('logPlot', { height: 750, margin: { l: 70, r: 20, t: 50, b: 50 } }); } catch(e2) {}
+        }
+
+        doc.setFillColor(13, 17, 23);
+        doc.rect(0, 0, W, H, 'F');
+        doc.setFillColor(230, 168, 23);
+        doc.rect(0, 0, 4, H, 'F');
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(230, 168, 23);
+        doc.text('CBL LOG DISPLAY', 10, 12);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 110, 130);
+        doc.text('Well: ' + wellName + '  |  Sampling: ' + sampleRange.value + ' m', 10, 19);
+
+        if (imgData) doc.addImage(imgData, 'PNG', 8, 24, W - 16, H - 32);
+
+        /* Page 3+: Table */
+        doc.addPage();
+        doc.setFillColor(13, 17, 23);
+        doc.rect(0, 0, W, H, 'F');
+        doc.setFillColor(230, 168, 23);
+        doc.rect(0, 0, 4, H, 'F');
+
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(230, 234, 243);
+        doc.text('INTERPRETATION ZONES SUMMARY', 10, 14);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 110, 130);
+        doc.text('Well: ' + wellName + '  |  CBL max=' + cblMaxInput.value + ' mV  |  CBL min=' + cblMinInput.value + ' mV  |  Sample=' + sampleRange.value + ' m  |  Smooth=' + smoothRange.value + ' m', 10, 21);
+
+        doc.setFontSize(8);
+        doc.setTextColor(230, 168, 23);
+        doc.text('Good: ' + goodPct + '% (' + Math.round(goodLen) + ' m)  |  Partial: ' + partialPct + '% (' + Math.round(partialLen) + ' m)  |  Poor: ' + poorPct + '% (' + Math.round(poorLen) + ' m)  |  Zones: ' + interpretedZones.length, 10, 28);
+
+        var y = 38;
+        var cols = [
+            { label: '#',        x: 10 },
+            { label: 'TOP (m)',  x: 22 },
+            { label: 'BASE (m)', x: 44 },
+            { label: 'THK (m)', x: 66 },
+            { label: 'CBL MIN', x: 86 },
+            { label: 'CBL MAX', x: 110 },
+            { label: 'AVG BI',  x: 134 },
+            { label: 'CLASS',   x: 158 },
+        ];
+        doc.setFillColor(28, 34, 48);
+        doc.rect(8, y - 5, W - 16, 8, 'F');
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(139, 149, 168);
+        cols.forEach(function(c) { doc.text(c.label, c.x, y); });
+        y += 6;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        interpretedZones.forEach(function(z, i) {
+            if (y > H - 18) {
+                doc.addPage();
+                doc.setFillColor(13, 17, 23);
+                doc.rect(0, 0, W, H, 'F');
+                doc.setFillColor(230, 168, 23);
+                doc.rect(0, 0, 4, H, 'F');
+                y = 18;
+            }
+            var rowBg = z.class === 'Good' ? [34, 197, 94] : z.class === 'Partial' ? [245, 158, 11] : [239, 68, 68];
+            doc.setFillColor(Math.max(0, Math.round(rowBg[0] * 0.12)), Math.max(0, Math.round(rowBg[1] * 0.12)), Math.max(0, Math.round(rowBg[2] * 0.12)));
+            doc.rect(8, y - 4, W - 16, 6.5, 'F');
+
+            doc.setTextColor(rowBg[0], rowBg[1], rowBg[2]);
+            doc.text(String(i + 1), 10, y);
+            doc.setTextColor(200, 210, 225);
+            doc.text(String(Math.round(z.topDepth)), 22, y);
+            doc.text(String(Math.round(z.bottomDepth)), 44, y);
+            doc.text(String(Math.round(z.thickness)), 66, y);
+            doc.text(String(Math.round(z.minCBL)), 86, y);
+            doc.text(String(Math.round(z.maxCBL)), 110, y);
+            doc.text(z.avgBI.toFixed(2), 134, y);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(rowBg[0], rowBg[1], rowBg[2]);
+            doc.text(z.class.toUpperCase(), 158, y);
+            doc.setFont('helvetica', 'normal');
+            y += 7;
+        });
+
+        /* Disclaimer */
+        doc.addPage();
+        doc.setFillColor(13, 17, 23);
+        doc.rect(0, 0, W, H, 'F');
+        doc.setFillColor(230, 168, 23);
+        doc.rect(0, 0, 4, H, 'F');
+
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(230, 168, 23);
+        doc.text('Cement Bond Log Interpreter', 14, 30);
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(200, 210, 225);
+        var dy = 46;
+        doc.text('2026 Ismail Harkat. All rights reserved.', 14, dy); dy += 9;
+        doc.text('Contact: geoharkat@gmail.com', 14, dy); dy += 9;
+        doc.text('License: MIT - https://opensource.org/licenses/MIT', 14, dy); dy += 20;
+
+        doc.setFontSize(9);
+        doc.setTextColor(100, 110, 130);
+        var disc = 'DISCLAIMER: This software is provided "as is", without warranty of any kind, express or implied. In no event shall the author be liable for any claim, damages, or other liability arising from the use of this software. The user assumes all responsibility for verifying results and interpretations against raw log data and applicable engineering standards.';
+        var discLines = doc.splitTextToSize(disc, W - 28);
+        doc.text(discLines, 14, dy);
+
+        doc.save(wellName + '_CBL_Report.pdf');
+        showToast('PDF report saved', 'success');
+    }
+</script>
+</body>
+</html>
